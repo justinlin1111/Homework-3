@@ -66,6 +66,13 @@ class EqualWeightPortfolio:
         """
         TODO: Complete Task 1 Below
         """
+        
+        equal_weight = 1.0 / (len(assets) - 1)
+        for asset in assets:
+            if asset == "SPY":
+                self.portfolio_weights[asset] = 0.0
+            else:
+                self.portfolio_weights[asset] = equal_weight
 
         """
         TODO: Complete Task 1 Above
@@ -101,7 +108,6 @@ Problem 2:
 Implement a risk parity strategy as dataframe "rp". Please do "not" include SPY.
 """
 
-
 class RiskParityPortfolio:
     def __init__(self, exclude, lookback=50):
         self.exclude = exclude
@@ -113,11 +119,18 @@ class RiskParityPortfolio:
 
         # Calculate the portfolio weights
         self.portfolio_weights = pd.DataFrame(index=df.index, columns=df.columns)
-
+        
         """
         TODO: Complete Task 2 Below
         """
-
+        asset_volatility = df_returns.rolling(window=self.lookback).std()
+        asset_weights = 1 / asset_volatility
+        asset_weights = asset_weights.div(asset_weights.sum(axis=1), axis=0)
+        asset_weights = asset_weights.drop(columns=self.exclude, errors="ignore")
+        asset_weights = asset_weights.div(asset_weights.sum(axis=1), axis=0)
+        asset_weights = asset_weights.shift(periods=1)
+        asset_weights.iloc[:self.lookback + 1] = 0
+        self.portfolio_weights.loc[:, assets] = asset_weights
         """
         TODO: Complete Task 2 Above
         """
@@ -192,9 +205,18 @@ class MeanVariancePortfolio:
 
                 # Sample Code: Initialize Decision w and the Objective
                 # NOTE: You can modify the following code
+                
                 w = model.addMVar(n, name="w", ub=1)
-                model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
+                # model.setObjective(w.sum(), gp.GRB.MAXIMIZE)
 
+                # Set the Objective to maximize utility: mu^T w - (gamma/2) w^T Sigma w
+                portfolio_return = mu @ w
+                portfolio_risk = w @ Sigma @ w
+                utility = portfolio_return - (gamma / 2) * portfolio_risk
+                model.setObjective(utility, gp.GRB.MAXIMIZE)
+                
+                # Add constraint: sum of weights equals 1
+                model.addConstr(w.sum() == 1, name="weight_sum")
                 """
                 TODO: Complete Task 3 Below
                 """
@@ -356,13 +378,14 @@ class AssignmentJudge:
 
     def check_dataframe_similarity(self, df1, df2, tolerance=0.01):
         # Check if the shape, index, and columns of both DataFrames are the same
+        
         if (
             df1.shape != df2.shape
             or not df1.index.equals(df2.index)
             or not df1.columns.equals(df2.columns)
         ):
             return False
-
+        
         # Compare values with allowed relative difference
         for column in df1.columns:
             if (

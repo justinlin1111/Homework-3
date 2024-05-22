@@ -74,7 +74,33 @@ class MyPortfolio:
         """
         TODO: Complete Task 4 Below
         """
+        
+        for i in range(self.lookback, len(self.price)):
+            # Calculate mean returns and covariance matrix for the lookback period
+            lookback_returns = self.returns[assets].iloc[i-self.lookback:i]
+            mean_returns = lookback_returns.mean()
+            cov_matrix = lookback_returns.cov()
 
+            # Optimization using Gurobi
+            model = gp.Model()
+            w = model.addVars(assets, lb=0.0, ub=1.0, name='weights')
+            portfolio_return = gp.quicksum(mean_returns[j] * w[j] for j in assets)
+            portfolio_risk = gp.quicksum(cov_matrix.iloc[i,j] * w[assets[i]] * w[assets[j]] for i in range(len(assets)) for j in range(len(assets)))
+
+            # Set objective: maximize return - gamma * risk
+            model.setObjective(portfolio_return - self.gamma * portfolio_risk, gp.GRB.MAXIMIZE)
+
+            # Add constraint: sum of weights equals 1
+            model.addConstr(gp.quicksum(w[j] for j in assets) == 1)
+
+            # Optimize the model
+            model.optimize()
+
+            # Retrieve optimized weights
+            weights = np.array([w[j].X for j in assets])
+            self.portfolio_weights.iloc[i, self.price.columns != self.exclude] = weights
+
+        
         """
         TODO: Complete Task 4 Above
         """
@@ -154,7 +180,6 @@ class AssignmentJudge:
         qs.reports.metrics(df_bl, mode="full", display=show)
 
         sharpe_ratio = qs.stats.sharpe(df_bl)
-
         return sharpe_ratio
 
     def cumulative_product(self, dataframe):
